@@ -1,0 +1,12 @@
+version: '3.8'
+services:
+  gold_bot:
+    build: .
+    container_name: gold_trading_bot
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./logs:/app/logs
+      - ./data:/app/data
+    environment:
+      - TZ=UTC
