@@ -33,21 +33,23 @@ class ChartGenerator:
     """
 
     def __init__(self) -> None:
+        # TradingView-style dark theme: familiar to anyone who has used a
+        # real trading platform (MT4/MT5, TradingView, Binance charts).
         self._style = mpf.make_mpf_style(
             base_mpf_style="charles",
             marketcolors=mpf.make_marketcolors(
-                up="#00c896",
-                down="#ff4560",
+                up="#26a69a",
+                down="#ef5350",
                 edge="inherit",
                 wick="inherit",
                 volume="in",
             ),
-            facecolor="#1a1a2e",
-            edgecolor="#3a3a5c",
-            figcolor="#1a1a2e",
-            gridcolor="#2a2a4c",
-            gridstyle="--",
-            rc={"axes.labelcolor": "#ccccdd", "xtick.color": "#aaaacc", "ytick.color": "#aaaacc"},
+            facecolor="#131722",
+            edgecolor="#2a2e39",
+            figcolor="#131722",
+            gridcolor="#1e222d",
+            gridstyle="-",
+            rc={"axes.labelcolor": "#d1d4dc", "xtick.color": "#787b86", "ytick.color": "#787b86"},
         ) if HAS_MPF else None
 
     # ------------------------------------------------------------------
@@ -66,8 +68,10 @@ class ChartGenerator:
         Returns:
             PNG image as bytes.
         """
-        # Work with the most recent 100 candles
-        chart_df = df.tail(100).copy()
+        # Work with the most recent candles only – fewer candles means each
+        # one is wider and the chart reads like a real trading platform
+        # instead of a dense, hard-to-follow wall of candles.
+        chart_df = df.tail(70).copy()
 
         # --- Ensure index is a DatetimeIndex (required by mplfinance) ---
         if not isinstance(chart_df.index, pd.DatetimeIndex):
@@ -136,8 +140,9 @@ class ChartGenerator:
             )
 
         # Horizontal signal lines
+        labels = ["Entry", "SL", "TP1", "TP2", "TP3"]
         hlines_prices = [signal.entry_price, signal.sl_price, signal.tp1, signal.tp2, signal.tp3]
-        hlines_colors = ["#ffffff", "#ff4560", "#00c896", "#00e5b0", "#00f0c0"]
+        hlines_colors = ["#d1d4dc", "#ef5350", "#26a69a", "#2ec6b8", "#4fd6c8"]
 
         buf = io.BytesIO()
         fig, axes = mpf.plot(
@@ -148,27 +153,71 @@ class ChartGenerator:
             volume=True,
             panel_ratios=(4, 1, 1, 1),
             title=f"\nXAU/USD  {signal.direction} Signal  |  Strength: {signal.strength.name}",
-            hlines=dict(hlines=hlines_prices, colors=hlines_colors, linestyle="--", linewidths=1.5),
+            hlines=dict(hlines=hlines_prices, colors=hlines_colors, linestyle="--", linewidths=1.1),
             returnfig=True,
             figsize=(14, 10),
         )
 
-        # Annotate horizontal lines
         ax_main = axes[0]
-        labels = ["Entry", "SL", "TP1", "TP2", "TP3"]
-        for price, color, label in zip(hlines_prices, hlines_colors, labels):
-            ax_main.annotate(
-                f"{label}: {price:.2f}",
-                xy=(len(chart_df) - 1, price),
-                xycoords=("data", "data"),
-                fontsize=7,
-                color=color,
-                ha="right",
-            )
+        self._draw_price_labels(ax_main, chart_df, hlines_prices, hlines_colors, labels)
 
-        fig.savefig(buf, format="png", dpi=120, bbox_inches="tight", facecolor="#1a1a2e")
+        fig.savefig(buf, format="png", dpi=120, bbox_inches="tight", facecolor="#131722")
         plt.close(fig)
         return buf.getvalue()
+
+    @staticmethod
+    def _draw_price_labels(
+        ax_main: Any,
+        chart_df: pd.DataFrame,
+        prices: List[float],
+        colors: List[str],
+        labels: List[str],
+    ) -> None:
+        """
+        Draw Entry/SL/TP price tags as readable boxes on the right edge,
+        like a real trading platform's price axis. When two levels sit too
+        close together (common when TP1/TP2/TP3 are near each other), the
+        tags are pushed apart vertically and connected back to their real
+        price with a thin leader line, so nothing overlaps or becomes
+        unreadable.
+        """
+        x_right = len(chart_df) - 1
+        ax_main.set_xlim(ax_main.get_xlim()[0], x_right + 9)
+
+        # Base the minimum gap on the axis's actual rendered range (not the
+        # raw candle high/low), since mplfinance adds its own padding –
+        # using the real ylim keeps label boxes from touching at any zoom.
+        y_lo, y_hi = ax_main.get_ylim()
+        min_gap = max((y_hi - y_lo) * 0.075, 1e-6)
+
+        # Resolve overlaps by walking levels low-to-high and pushing
+        # anything too close to its neighbour further up.
+        order = sorted(range(len(prices)), key=lambda i: prices[i])
+        label_y = {}
+        last_y = None
+        for i in order:
+            y = prices[i]
+            if last_y is not None and y - last_y < min_gap:
+                y = last_y + min_gap
+            label_y[i] = y
+            last_y = y
+
+        for i, (price, color, label) in enumerate(zip(prices, colors, labels)):
+            y = label_y[i]
+            ax_main.annotate(
+                f"{label}  {price:.2f}",
+                xy=(x_right, price),
+                xycoords="data",
+                xytext=(x_right + 1.5, y),
+                textcoords="data",
+                fontsize=8,
+                fontweight="bold",
+                color="#131722",
+                va="center",
+                ha="left",
+                bbox=dict(boxstyle="round,pad=0.3", fc=color, ec="none", alpha=0.95),
+                arrowprops=dict(arrowstyle="-", color=color, lw=0.8, alpha=0.7),
+            )
 
     def _fallback_chart(self, chart_df: pd.DataFrame, signal: Any) -> bytes:
         """Simple matplotlib candlestick-style line chart when mplfinance unavailable."""
