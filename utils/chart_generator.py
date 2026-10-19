@@ -33,23 +33,24 @@ class ChartGenerator:
     """
 
     def __init__(self) -> None:
-        # TradingView-style dark theme: familiar to anyone who has used a
-        # real trading platform (MT4/MT5, TradingView, Binance charts).
+        # MT4/MT5 default theme: white background, thin candles – this is
+        # the chart traders actually see in their broker app, so it reads
+        # as familiar instead of a stylised "crypto app" dark theme.
         self._style = mpf.make_mpf_style(
             base_mpf_style="charles",
             marketcolors=mpf.make_marketcolors(
-                up="#26a69a",
-                down="#ef5350",
+                up="#2e9e6b",
+                down="#e0483e",
                 edge="inherit",
                 wick="inherit",
                 volume="in",
             ),
-            facecolor="#131722",
-            edgecolor="#2a2e39",
-            figcolor="#131722",
-            gridcolor="#1e222d",
-            gridstyle="-",
-            rc={"axes.labelcolor": "#d1d4dc", "xtick.color": "#787b86", "ytick.color": "#787b86"},
+            facecolor="#ffffff",
+            edgecolor="#c6c9d0",
+            figcolor="#ffffff",
+            gridcolor="#e3e5ea",
+            gridstyle="--",
+            rc={"axes.labelcolor": "#1a1a1a", "xtick.color": "#5c6066", "ytick.color": "#5c6066"},
         ) if HAS_MPF else None
 
     # ------------------------------------------------------------------
@@ -71,7 +72,7 @@ class ChartGenerator:
         # Work with the most recent candles only – fewer candles means each
         # one is wider and the chart reads like a real trading platform
         # instead of a dense, hard-to-follow wall of candles.
-        chart_df = df.tail(70).copy()
+        chart_df = df.tail(45).copy()
 
         # --- Ensure index is a DatetimeIndex (required by mplfinance) ---
         if not isinstance(chart_df.index, pd.DatetimeIndex):
@@ -100,68 +101,33 @@ class ChartGenerator:
             return self._fallback_chart(chart_df, signal)
 
     def _mpf_chart(self, chart_df: pd.DataFrame, signal: Any) -> bytes:
-        """Render chart using mplfinance with add_plot overlays."""
-        addplots = []
-        colors_ema = {"ema_20": "#00c8ff", "ema_50": "#ffaa00", "ema_200": "#ff4560"}
-        for col, color in colors_ema.items():
-            if col in chart_df.columns:
-                addplots.append(
-                    mpf.make_addplot(chart_df[col], color=color, width=1.2, panel=0)
-                )
-
-        # RSI panel
-        if "rsi" in chart_df.columns:
-            addplots.append(
-                mpf.make_addplot(
-                    chart_df["rsi"],
-                    panel=2,
-                    color="#c084fc",
-                    ylabel="RSI",
-                    width=1.0,
-                )
-            )
-
-        # MACD panel
-        if all(c in chart_df.columns for c in ["macd", "macd_signal", "macd_hist"]):
-            addplots.append(
-                mpf.make_addplot(chart_df["macd"], panel=3, color="#00c8ff", ylabel="MACD")
-            )
-            addplots.append(
-                mpf.make_addplot(chart_df["macd_signal"], panel=3, color="#ffaa00")
-            )
-            addplots.append(
-                mpf.make_addplot(
-                    chart_df["macd_hist"],
-                    panel=3,
-                    type="bar",
-                    color="#888888",
-                    alpha=0.6,
-                )
-            )
-
-        # Horizontal signal lines
+        """
+        Render a single-panel candlestick chart matching a real trading
+        app's order screen (MT4/MT5 style): just price + the Entry/SL/TP
+        lines with a price tag on the right axis. No RSI/MACD/volume
+        sub-panels – those add clutter without helping someone read
+        "where do I enter, where's my stop, where's my target" at a glance.
+        """
         labels = ["Entry", "SL", "TP1", "TP2", "TP3"]
         hlines_prices = [signal.entry_price, signal.sl_price, signal.tp1, signal.tp2, signal.tp3]
-        hlines_colors = ["#d1d4dc", "#ef5350", "#26a69a", "#2ec6b8", "#4fd6c8"]
+        hlines_colors = ["#2962ff", "#e0483e", "#1a9e7a", "#148067", "#0e6654"]
 
         buf = io.BytesIO()
         fig, axes = mpf.plot(
             chart_df,
             type="candle",
             style=self._style,
-            addplot=addplots if addplots else None,
-            volume=True,
-            panel_ratios=(4, 1, 1, 1),
+            volume=False,
             title=f"\nXAU/USD  {signal.direction} Signal  |  Strength: {signal.strength.name}",
-            hlines=dict(hlines=hlines_prices, colors=hlines_colors, linestyle="--", linewidths=1.1),
+            hlines=dict(hlines=hlines_prices, colors=hlines_colors, linestyle=":", linewidths=1.3),
             returnfig=True,
-            figsize=(14, 10),
+            figsize=(9, 8),
         )
 
         ax_main = axes[0]
         self._draw_price_labels(ax_main, chart_df, hlines_prices, hlines_colors, labels)
 
-        fig.savefig(buf, format="png", dpi=120, bbox_inches="tight", facecolor="#131722")
+        fig.savefig(buf, format="png", dpi=130, bbox_inches="tight", facecolor="#ffffff")
         plt.close(fig)
         return buf.getvalue()
 
@@ -212,7 +178,7 @@ class ChartGenerator:
                 textcoords="data",
                 fontsize=8,
                 fontweight="bold",
-                color="#131722",
+                color="#ffffff",
                 va="center",
                 ha="left",
                 bbox=dict(boxstyle="round,pad=0.3", fc=color, ec="none", alpha=0.95),

@@ -262,10 +262,19 @@ class GoldBot:
         )
         await self.telegram.menyu_klaviatura_yuborish()
 
+    @staticmethod
+    def _dam_olish_kunimi() -> bool:
+        """Shanba/yakshanba – XAU/USD bozori yopiq, signal yaratish shart emas."""
+        return datetime.now(timezone.utc).weekday() >= 5  # 5=Shanba, 6=Yakshanba
+
     async def run_cycle(self) -> None:
         """Bir to'liq trading sikli."""
         self._sikl_soni += 1
         logger.debug("--- %d-sikl boshlanmoqda ---", self._sikl_soni)
+
+        if self._dam_olish_kunimi():
+            logger.debug("Dam olish kuni (shanba/yakshanba) – bozor yopiq, signal tekshirilmaydi")
+            return
 
         if self.config.news_filter_enabled:
             await self.news_filter.fetch_news_calendar()
