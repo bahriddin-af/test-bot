@@ -66,8 +66,11 @@ def calculate_rsi(df: pd.DataFrame, period: int = 14) -> pd.DataFrame:
     avg_gain = gain.ewm(alpha=1 / period, adjust=False).mean()
     avg_loss = loss.ewm(alpha=1 / period, adjust=False).mean()
     rs = avg_gain / avg_loss.replace(0, np.nan)
-    df["rsi"] = 100.0 - (100.0 / (1.0 + rs))
-    df["rsi"] = df["rsi"].fillna(50.0)
+    rsi = 100.0 - (100.0 / (1.0 + rs))
+    # avg_loss == 0 means no down candles in the window: RSI is 100 if there
+    # was any gain, or 50 (flat/no data yet) if there was none either.
+    no_loss_rsi = np.where(avg_gain > 0, 100.0, 50.0)
+    df["rsi"] = rsi.where(avg_loss != 0, no_loss_rsi).fillna(50.0)
     return df
 
 
